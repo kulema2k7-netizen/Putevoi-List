@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Путевые листы</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#14171f;--mut:#6b7280;--bd:#e3e6eb;--ac:#2563eb;--bad:#dc2626;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1218;--card:#181c25;--fg:#eef0f4;--mut:#9aa3b2;--bd:#282e3a;--ac:#5b8cff;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#0f1218;--card:#181c25;--fg:#eef0f4;--mut:#9aa3b2;--bd:#282e3a;--ac:#5b8cff;--bad:#f87171}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:6px 0 12px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+button,input{font:inherit}
+.tab,.btn{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:10px;padding:10px 14px;cursor:pointer}
+.tab{flex:1}.tab.on,.btn.pri{background:var(--ac);border-color:var(--ac);color:#fff}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--fg)}
+.full{grid-column:1/-1}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}
+.st{background:var(--bg);border-radius:10px;padding:8px 10px}.st b{display:block;font-size:17px}.st span{font-size:11px;color:var(--mut)}
+.bad{color:var(--bad)}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.sm{font-size:13px;color:var(--mut)}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+.msg{padding:10px;border-radius:10px;margin-bottom:10px;background:var(--card);border:1px solid var(--bd);font-size:14px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>⛽ Путевые листы</h1>
+<div class="tabs"><button class="tab on" id="t1">Новая запись</button><button class="tab" id="t2">Журнал</button></div>
+<div id="msg" class="msg" hidden></div>
+
+<section id="v1">
+<div class="card">
+<div class="grid">
+<div class="full"><label>Дата (пусто = сегодня)</label><input id="date" type="date"></div>
+<div><label>Начальный км</label><input id="ks" inputmode="decimal"></div>
+<div><label>Конечный км</label><input id="ke" inputmode="decimal"></div>
+<div><label>Заправка, л</label><input id="fu" inputmode="decimal" value="0"></div>
+<div><label>Остаток на начало, л</label><input id="fs" inputmode="decimal" value="0"></div>
+<div><label>Часы ожидания</label><input id="hr" inputmode="decimal" value="0"></div>
+<div><label>Норма, л/100 км</label><input id="nm" inputmode="decimal" value="27"></div>
+</div>
+<div class="stats" id="pv"></div>
+<button class="btn pri" id="save" style="width:100%">Сохранить запись</button>
+</div>
+</section>
+
+<section id="v2" hidden>
+<div class="card"><div class="stats" id="tot"></div>
+<div class="acts"><button class="btn" id="ejson">Скачать JSON</button><button class="btn" id="ecsv">Скачать CSV</button><button class="btn" id="imp">Загрузить JSON</button></div>
+<input type="file" id="file" accept=".json,application/json" hidden></div>
+<div id="list"></div>
+</section>
+</main>
+<script>
+var KEY="waybill-path-log-v1",NH=1.37,H=[];
+var $=function(i){return document.getElementById(i)};
+function rd(v,d){var f=Math.pow(10,d);return Math.round((v+Number.EPSILON)*f)/f}
+function num(s){s=String(s).trim().replace(",",".");if(!s)return null;var v=Number(s);return isFinite(v)?v:null}
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function calc(d){var dist=rd(d.ke-d.ks,1),fk=rd(dist/100*d.nm,2),fh=rd(d.hr*NH,2),t=rd(fk+fh,2);
+return{date:d.date,ks:d.ks,ke:d.ke,dist:dist,fuel:d.fu,fs:d.fs,fk:fk,fh:fh,tot:t,fe:rd(d.fs+d.fu-t,2),hr:d.hr,nm:d.nm}}
+function recalc(a,i){var f=a[i].fs;for(var k=i;k<a.length;k++){var r=a[k];r.fs=rd(f,2);r.fk=rd(r.dist/100*r.nm,2);r.fh=rd(r.hr*NH,2);r.tot=rd(r.fk+r.fh,2);r.fe=rd(f+r.fuel-r.tot,2);f=r.fe}return a}
+function msg(t,bad){var m=$("msg");m.textContent=t;m.hidden=!t;m.className="msg"+(bad?" bad":"")}
+/* ---- storage: localStorage + IndexedDB, берём более полный ---- */
+function lsGet(k){try{var p=JSON.parse(localStorage.getItem(k));return Array.isArray(p)?p:null}catch(e){return null}}
+function idb(){return new Promise(function(ok){try{var r=indexedDB.open("waybill-db",1);r.onupgradeneeded=function(){r.result.createObjectStore("kv")};r.onsuccess=function(){ok(r.result)};r.onerror=function(){ok(null)}}catch(e){ok(null)}})}
+function idbGet(){return idb().then(function(db){return new Promise(function(ok){if(!db)return ok(null);try{var q=db.transaction("kv").objectStore("kv").get(KEY);q.onsuccess=function(){ok(Array.isArray(q.result)?q.result:null)};q.onerror=function(){ok(null)}}catch(e){ok(null)}})})}
+function idbPut(a){return idb().then(function(db){return new Promise(function(ok){if(!db)return ok(false);try{var t=db.transaction("kv","readwrite");t.objectStore("kv").put(a,KEY);t.oncomplete=function(){ok(true)};t.onerror=t.onabort=function(){ok(false)}}catch(e){ok(false)}})})}
+function persist(a){H=a;var ok=false;try{var p=localStorage.getItem(KEY);if(p)localStorage.setItem(KEY+"-prev",p);localStorage.setItem(KEY,JSON.stringify(a));ok=true}catch(e){}
+return idbPut(a).then(function(o){if(!ok&&!o)msg("Не удалось сохранить в браузере. Скачайте JSON, чтобы не потерять данные.",true)})}
+function load(){return idbGet().then(function(x){var c=[lsGet(KEY),x,lsGet(KEY+"-prev")].filter(function(l){return l&&l.length});
+var b=c.reduce(function(a,l){return l.length>a.length?l:a},[]);if(b.length){try{localStorage.setItem(KEY,JSON.stringify(b))}catch(e){}idbPut(b)}return b})}
+/* ---- UI ---- */
+function draft(){var ks=num($("ks").value),ke=num($("ke").value),fu=num($("fu").value),fs=num($("fs").value),hr=num($("hr").value),nm=num($("nm").value);
+if([ks,ke,fu,fs,hr,nm].some(function(v){return v===null}))return null;return{date:$("date").value||today(),ks:ks,ke:ke,fu:fu,fs:fs,hr:hr,nm:nm}}
+function st(l,v,w){return'<div class="st"><span>'+l+'</span><b class="'+(w?"bad":"")+'">'+v+"</b></div>"}
+function preview(){var d=draft();if(!d||d.ke<d.ks){$("pv").innerHTML="";return null}var r=calc(d);
+$("pv").innerHTML=st("Пройдено",r.dist+" км")+st("Расход",r.tot+" л")+st("По км / часы",r.fk+" / "+r.fh)+st("Остаток",r.fe+" л",r.fe<0);return r}
+function prefill(){var l=H[H.length-1];if(l){$("ks").value=l.ke;$("fs").value=l.fe;$("nm").value=l.nm}$("ke").value="";$("fu").value="0";$("hr").value="0";$("date").value="";preview()}
+function render(){var s=H.reduce(function(a,r){a.km+=r.dist;a.sp+=r.tot;return a},{km:0,sp:0});
+$("tot").innerHTML=st("Дней",H.length)+st("Пробег",rd(s.km,1)+" км")+st("Расход",rd(s.sp,2)+" л")+st("Остаток",(H.length?H[H.length-1].fe:0)+" л");
+$("list").innerHTML=H.slice().map(function(r,i){return[r,i]}).reverse().map(function(p){var r=p[0],i=p[1];
+return'<div class="card"><div class="row"><div><b>'+r.date+'</b><div class="sm">'+r.ks+" → "+r.ke+" км · "+r.dist+' км</div><div class="sm">Заправка '+r.fuel+" л · расход "+r.tot+' л</div><div class="sm">Остаток: '+r.fs+" → <b"+(r.fe<0?' class="bad"':"")+">"+r.fe+' л</b></div></div><button class="btn" data-del="'+i+'">Удалить</button></div></div>'}).join("")||'<div class="sm">Записей пока нет.</div>'}
+function dl(name,text,type){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){a.remove()},500)}
+function tab(n){$("v1").hidden=n!==1;$("v2").hidden=n!==2;$("t1").className="tab"+(n===1?" on":"");$("t2").className="tab"+(n===2?" on":"")}
+["date","ks","ke","fu","fs","hr","nm"].forEach(function(i){$(i).addEventListener("input",preview)});
+$("t1").onclick=function(){tab(1)};$("t2").onclick=function(){tab(2);render()};
+$("save").onclick=function(){var d=draft();if(!d)return msg("Заполните все числовые поля.",true);if(d.ke<d.ks)return msg("Конечный км меньше начального.",true);
+persist(H.concat([calc(d)])).then(function(){msg("Запись сохранена.");prefill();render()})};
+$("list").onclick=function(e){var i=e.target.getAttribute&&e.target.getAttribute("data-del");if(i===null||i===undefined)return;i=+i;
+if(!confirm("Удалить запись за "+H[i].date+"?"))return;var n=H.filter(function(_,k){return k!==i});
+if(n.length&&i<n.length){if(i>0)n[i].fs=n[i-1].fe;n=recalc(n,i)}persist(n).then(function(){render();prefill()})};
+$("ejson").onclick=function(){dl("waybills.json",JSON.stringify(H,null,1),"application/json")};
+$("ecsv").onclick=function(){var h="Дата;Нач. км;Кон. км;Пройдено км;Заправка (л);Остаток на начало (л);Расход по км (л);Расход по времени (л);Итого потрачено (л);Остаток на конец (л);Часы ожидания;Норма л/100км";
+dl("waybills.csv","\ufeff"+h+"\n"+H.map(function(r){return[r.date,r.ks,r.ke,r.dist,r.fuel,r.fs,r.fk,r.fh,r.tot,r.fe,r.hr,r.nm].join(";")}).join("\n"),"text/csv")};
+$("imp").onclick=function(){$("file").click()};
+$("file").onchange=function(){var f=this.files[0];if(!f)return;var fr=new FileReader();fr.onload=function(){try{var a=JSON.parse(fr.result);
+if(!Array.isArray(a))throw 0;var m=a.map(function(r){if("dist" in r)return r;return{date:r["Дата"],ks:r["Нач. км"],ke:r["Кон. км"],dist:r["Пройдено км"],fuel:r["Заправка (л)"],fs:r["Остаток на начало (л)"],fk:r["Расход по км (л)"],fh:r["Расход по времени (л)"],tot:r["Итого потрачено (л)"],fe:r["Остаток на конец (л)"],hr:r["Часы ожидания"],nm:r["Норма л/100км"]}}).filter(function(r){return r.date&&isFinite(r.dist)});
+persist(m).then(function(){msg("Загружено записей: "+m.length);render();prefill()})}catch(e){msg("Не удалось прочитать файл.",true)}};fr.readAsText(f);this.value=""};
+if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(function(){})}
+load().then(function(a){H=a;prefill();render();try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}});
+</script>
+</body>
+</html>
